@@ -1,0 +1,9 @@
+services:
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: taskboard
+      POSTGRES_PASSWORD: taskboard123
+      POSTGRES_DB: taskboard
+    ports:
+      - "5432:5432"
