@@ -117,10 +117,32 @@ Jest + Supertest configured. Tests dans `tests/unit/` et `tests/integration/`.
 3. Créer Dockerfile + docker-compose finale
 4. CI/CD pipeline
 
+## Cas de tests manquants
+
+Cas identifiés qui ne sont toujours pas couverts et qui seraient importants :
+
+**Validation des inputs**
+- `POST /tasks` sans `title` : actuellement passe sans erreur, la BD va échouer silencieusement. Important car c'est un contrat API non respecté.
+- `PUT /tasks/:id` avec un `status` invalide (ex: `"random"`) : la BD a un CHECK constraint qui va rejeter, mais l'API ne retourne pas de message clair.
+
+**Sécurité auth**
+- Token avec signature invalide (clé secrète différente) : devrait retourner 401.
+- Token expiré : devrait retourner 401 avec un message spécifique.
+- Header `Authorization` malformé (ex: juste `Bearer` sans token) : comportement non testé.
+
+**SQL Injection**
+- `GET /tasks?status='; DROP TABLE tasks; --` : `findByStatus` est vulnérable (interpolation directe). Important à tester avant de patcher pour documenter la faille.
+
+**Endpoint /metrics**
+- Retourne 501 mais n'est pas testé. Si quelqu'un l'implémente, il faut un test de non-régression.
+
+**Concurrence**
+- Deux updates simultanés sur la même tâche : `updated_at` peut être incohérent. Difficile à tester en unit/intégration, nécessiterait des tests E2E avec vraie BD.
+
 ## Résumé
 
 - App fonctionne bien localement ✅
 - Architecture simple et facile à comprendre ✅
 - Quelques failles de sécurité à patcher avant prod ⚠️
 - Pas de monitoring/metrics pour maintenant (c'est un MVP) ⚠️
-- Tests pas testés encore (BD test pas setup)
+- Tests mis à jour : PUT, DELETE, filtre status, mauvais mot de passe couverts ✅

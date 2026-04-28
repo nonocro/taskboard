@@ -113,3 +113,99 @@ describe('POST /tasks', () => {
     expect(res.body.status).toBe('todo');
   });
 });
+
+describe('PUT /tasks/:id', () => {
+  test('should update a task and return 200', async () => {
+    const updated = { id: 1, title: 'Updated', description: 'New desc', status: 'done' };
+    pool.query.mockResolvedValue({ rows: [updated] });
+
+    const token = generateToken();
+    const res = await request(app)
+      .put('/tasks/1')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'Updated', description: 'New desc', status: 'done' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBe('Updated');
+    expect(res.body.status).toBe('done');
+  });
+
+  test('should return 404 when task does not exist', async () => {
+    pool.query.mockResolvedValue({ rows: [] });
+
+    const token = generateToken();
+    const res = await request(app)
+      .put('/tasks/999')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ title: 'X', description: '', status: 'todo' });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('Task not found');
+  });
+
+  test('should return 401 without authentication', async () => {
+    const res = await request(app)
+      .put('/tasks/1')
+      .send({ title: 'X', description: '', status: 'todo' });
+
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('DELETE /tasks/:id', () => {
+  test('should delete a task and return 200', async () => {
+    pool.query.mockResolvedValue({ rows: [{ id: 1, title: 'Task 1' }] });
+
+    const token = generateToken();
+    const res = await request(app)
+      .delete('/tasks/1')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.message).toBe('Task deleted successfully');
+  });
+
+  test('should return 404 when task does not exist', async () => {
+    pool.query.mockResolvedValue({ rows: [] });
+
+    const token = generateToken();
+    const res = await request(app)
+      .delete('/tasks/999')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('Task not found');
+  });
+});
+
+describe('GET /tasks?status=', () => {
+  test('should return tasks filtered by status', async () => {
+    const mockTasks = [{ id: 1, title: 'Task 1', status: 'todo' }];
+    pool.query.mockResolvedValue({ rows: mockTasks });
+
+    const token = generateToken();
+    const res = await request(app)
+      .get('/tasks?status=todo')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].status).toBe('todo');
+  });
+});
+
+describe('POST /auth/login - wrong password', () => {
+  test('should return 401 for wrong password', async () => {
+    const hashedPassword = await bcrypt.hash('correctpassword', 10);
+    pool.query.mockResolvedValue({
+      rows: [{ id: 1, username: 'admin', password: hashedPassword }],
+    });
+
+    const res = await request(app)
+      .post('/auth/login')
+      .send({ username: 'admin', password: 'wrongpassword' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('Invalid credentials');
+  });
+});
