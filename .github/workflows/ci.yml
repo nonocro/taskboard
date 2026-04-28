@@ -64,9 +64,7 @@ jobs:
         id: meta
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha
-            type=raw,value=latest
+          tags: type=sha,format=long
 
       - uses: docker/login-action@v3
         with:
@@ -82,3 +80,63 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy via SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          IMAGE: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+        run: |
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/id_deploy
+          echo "$DEPLOY_KEY" > ~/.ssh/id_deploy
+
+          ssh -i ~/.ssh/id_deploy \
+            -p "$DEPLOY_PORT" \
+            -o StrictHostKeyChecking=no \
+            root@"$DEPLOY_HOST" << EOF
+          set -euo pipefail
+          IMAGE='$IMAGE'
+          JWT_SECRET='$JWT_SECRET'
+          DATABASE_URL="postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@db:5432/$POSTGRES_DB"
+          CONTAINER_NAME=taskboard-app
+          NETWORK="taskboard"
+
+          docker pull "\$IMAGE"
+          docker stop "\$CONTAINER_NAME" 2>/dev/null || true
+          docker rm "\$CONTAINER_NAME" 2>/dev/null || true
+
+          OCCUPANT=\$(docker ps -q --filter publish=3000)
+          [ -n "\$OCCUPANT" ] && docker stop "\$OCCUPANT"
+
+          docker run -d \
+            --name "\$CONTAINER_NAME" \
+            --network "\$NETWORK" \
+            --restart unless-stopped \
+            -p 3000:3000 \
+            -e DATABASE_URL="\$DATABASE_URL" \
+            -e JWT_SECRET="\$JWT_SECRET" \
+            -e NODE_ENV=production \
+            "\$IMAGE"
+
+          for i in \$(seq 1 30); do
+            STATUS=\$(docker inspect --format='{{.State.Health.Status}}' "\$CONTAINER_NAME" 2>/dev/null || echo starting)
+            [ "\$STATUS" = healthy ] && echo "Deployment successful" && exit 0
+            sleep 3
+          done
+
+          echo "Healthcheck failed — deployment aborted"
+          docker logs --tail 20 "\$CONTAINER_NAME" || true
+          exit 1
+          EOF

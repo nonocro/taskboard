@@ -1,25 +1,14 @@
 services:
-  app:
-    build: .
-    ports:
-      - "${PORT:-3000}:3000"
-    environment:
-      DATABASE_URL: postgresql://taskboard:taskboard@db:5432/taskboard
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      NODE_ENV: production
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
-
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: taskboard
-      POSTGRES_PASSWORD: taskboard
-      POSTGRES_DB: taskboard
+      POSTGRES_USER: ${POSTGRES_USER:-taskboard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taskboard}
+      POSTGRES_DB: ${POSTGRES_DB:-taskboard}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - taskboard
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U taskboard -d taskboard"]
       interval: 10s
@@ -27,6 +16,25 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+
+  ssh-server:
+    build: ./deploy
+    ports:
+      - "2222:22"
+    environment:
+      SSH_PUBLIC_KEY: ${DEPLOY_PUBLIC_KEY}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - taskboard
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  taskboard:
+    name: taskboard
 
 volumes:
   postgres_data:
