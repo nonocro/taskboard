@@ -1,4 +1,4 @@
-const errorHandler = (err, req, res, next) => {
+const errorHandler = (err, req, res) => {
   console.error('Unhandled error:', err.message);
   console.error(err.stack);
 
